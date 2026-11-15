@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Flights{% endblock %}
+{% block body_class %}fl-page{% endblock %}
+
+{% block extra_head %}
+<link rel="stylesheet" href="{% static 'flights/flights.css' %}">
+{% endblock %}
+
+{% block content %}
+<div class="fl-wrap" id="fl" data-state-url="{% url 'flights_state' %}" data-search-url="{% url 'flights_search' %}"
+     data-track-url="{% url 'flights_track' %}" data-base-url="{% url 'flights_index' %}">
+  {% csrf_token %}
+  <div class="fl-head">
+    <div>
+      <h1>Flights</h1>
+      <p id="fl-count"></p>
+    </div>
+    <span class="fl-budget" id="fl-budget"></span>
+    <button class="fl-btn" id="fl-new"><i class="fa-solid fa-plus"></i>Add flight</button>
+  </div>
+  <div class="fl-warn" id="fl-nokey" hidden>
+    <i class="fa-solid fa-key"></i>Add your FlightAware AeroAPI key in this app's settings to look flights up.
+  </div>
+  <div class="fl-main">
+    <div class="fl-list" id="fl-list"></div>
+    <div class="fl-detail" id="fl-detail"></div>
+  </div>
+  <div class="fl-empty" id="fl-empty" hidden>
+    <i class="fa-solid fa-plane"></i>
+    <b>No flights tracked</b>
+    <span>Tap <em>Add flight</em> to follow one.</span>
+  </div>
+</div>
+
+<div class="fl-sheet" id="fl-sheet" hidden>
+  <div class="fl-panel">
+    <h3>Add a flight</h3>
+    <div class="fl-seg" id="fl-seg">
+      <button data-mode="ident" class="on">Flight number</button>
+      <button data-mode="route">Route</button>
+    </div>
+    <div class="fl-row" id="fl-by-ident">
+      <input class="fl-in" id="fl-ident" maxlength="10" placeholder="Flight (e.g. AS342)" autocomplete="off">
+    </div>
+    <div class="fl-row" id="fl-by-route" hidden>
+      <input class="fl-in" id="fl-origin" maxlength="4" placeholder="From (SEA)" autocomplete="off">
+      <i class="fa-solid fa-arrow-right fl-arrow"></i>
+      <input class="fl-in" id="fl-dest" maxlength="4" placeholder="To (SFO)" autocomplete="off">
+    </div>
+    <div class="fl-row">
+      <input class="fl-in fl-date" id="fl-date" type="date">
+      <button class="fl-btn" id="fl-find"><i class="fa-solid fa-magnifying-glass"></i>Find</button>
+    </div>
+    <div class="fl-results" id="fl-results"></div>
+    <label class="fl-check"><input type="checkbox" id="fl-popups"><span class="fl-tog"></span>Show popups on the screens for this flight</label>
+    <div class="fl-err" id="fl-err"></div>
+    <div class="fl-acts">
+      <small class="fl-hint" id="fl-cost"></small>
+      <button class="fl-btn ghost" id="fl-cancel">Cancel</button>
+      <button class="fl-btn" id="fl-track" disabled><i class="fa-solid fa-plane"></i>Track</button>
+    </div>
+  </div>
+</div>
+<div class="fl-toast" id="fl-toast" hidden></div>
+
+{{ state|json_script:"fl-initial" }}
+<script src="{% static 'flights/flights.js' %}"></script>
+{% endblock %}

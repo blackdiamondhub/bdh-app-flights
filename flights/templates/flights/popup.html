@@ -1,0 +1,64 @@
+{% load static %}<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Flight</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden; }
+  body {
+    background: radial-gradient(ellipse 110% 90% at 30% 20%, #22314d, #101722 60%, #07090d);
+    color: #eef3fa; font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    display: flex; flex-direction: column; justify-content: center; padding: 0 6vw; box-sizing: border-box;
+  }
+  .top { display: flex; align-items: center; gap: 2.5vw; }
+  .top b { font-size: 9vh; font-weight: 700; }
+  .pill { font-size: 3.6vh; padding: .6vh 2vh; border-radius: 999px; font-weight: 600; background: #26313d; color: #a9b6c3; }
+  .pill.in-air { background: #10304a; color: #5bb4ff; }
+  .pill.landed { background: #12391f; color: #5fd38a; }
+  .pill.delayed { background: #3d2a0c; color: #f2b84b; }
+  .pill.cancelled, .pill.diverted { background: #4a1a14; color: #ff8a72; }
+  .route { display: flex; align-items: center; gap: 3vw; margin: 4vh 0 2vh; }
+  .ap { font-size: 12vh; font-weight: 700; line-height: 1; }
+  .ap small { display: block; font-size: 3.4vh; font-weight: 400; color: #8fa3bd; margin-top: 1vh; }
+  .route i { font-size: 6vh; color: #5ba4e6; }
+  .detail { font-size: 5.4vh; color: #dbe6f5; }
+  .gates { font-size: 3.6vh; color: #8fa3bd; margin-top: 2vh; }
+</style>
+</head>
+<body>
+  <div class="top"><i class="fa-solid fa-plane" style="font-size:7vh;color:#5ba4e6"></i><b id="ident"></b><span class="pill" id="pill"></span></div>
+  <div class="route">
+    <div class="ap" id="from"></div><i class="fa-solid fa-arrow-right"></i><div class="ap" id="to"></div>
+  </div>
+  <div class="detail" id="detail"></div>
+  <div class="gates" id="gates"></div>
+  {{ flight|json_script:"fl-flight" }}
+  <script>
+    (function () {
+      const f = JSON.parse(document.getElementById("fl-flight").textContent);
+      const set = (id, text) => { document.getElementById(id).textContent = text || ""; };
+      const ap = (id, a) => {
+        a = a || {};
+        const el = document.getElementById(id);
+        el.textContent = a.code || "";
+        const s = document.createElement("small");
+        s.textContent = a.city || a.name || "";
+        el.appendChild(s);
+      };
+      set("ident", f.ident);
+      set("pill", f.pill);
+      document.getElementById("pill").className = "pill " + String(f.pill || "").toLowerCase().replace(/\s+/g, "-");
+      ap("from", f.origin);
+      ap("to", f.destination);
+      set("detail", f.detail);
+      const g = [];
+      if (f.gate_out) g.push(`Departure gate ${f.gate_out}`);
+      if (f.gate_in) g.push(`Arrival gate ${f.gate_in}`);
+      if (f.baggage) g.push(`Bags ${f.baggage}`);
+      set("gates", g.join(" · "));
+    })();
+  </script>
+</body>
+</html>
