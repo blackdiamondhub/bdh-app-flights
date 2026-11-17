@@ -4,7 +4,7 @@ body.fl-page {
   overflow: hidden;
 }
 .fl-wrap {
-  position: fixed; top: 62px; left: 0; right: 0; bottom: 0; overflow-y: auto;
+  position: fixed; top: 0; left: 0; right: 0; bottom: 0; overflow-y: auto;
   padding: 22px 32px 40px; box-sizing: border-box; color: #eef3fa;
 }
 .fl-btn {
