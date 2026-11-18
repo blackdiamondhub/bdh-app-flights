@@ -7,7 +7,7 @@ from django.shortcuts import render
 from django.views.decorators.clickjacking import xframe_options_sameorigin
 from django.views.decorators.http import require_GET, require_POST
 
-from . import aeroapi, homepage, store, worker
+from . import aeroapi, airports, homepage, store, worker
 
 log = logging.getLogger(__name__)
 CONTROLS = ("remove", "refresh", "popups_on", "popups_off")
@@ -29,7 +29,7 @@ def _error(msg, status=400):
 def _state():
     now = time.time()
     return {"now": now, "max": store.MAX_FLIGHTS, "has_key": bool(aeroapi.api_key()),
-            "budget": store.budget(now), "costs": aeroapi.COST,
+            "budget": store.budget(now), "costs": aeroapi.COST, "home": airports.home(),
             "flights": [store.snapshot(f, now) for f in store.flights()]}
 
 
@@ -49,6 +49,11 @@ def popup(request, flight_id):
 @require_GET
 def state(request):
     return JsonResponse(_state())
+
+
+@require_GET
+def airport_search(request):
+    return JsonResponse({"airports": airports.search(request.GET.get("q", "")[:60])})
 
 
 @require_POST

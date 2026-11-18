@@ -13,7 +13,7 @@ import time
 
 import requests
 
-from . import store
+from . import airports, store
 
 BASE = "https://aeroapi.flightaware.com/aeroapi"
 TIMEOUT = 15
@@ -119,10 +119,14 @@ def parse_ident(text):
 
 
 def parse_airport(text, what):
-    code = str(text or "").strip().upper()
-    if not AIRPORT.match(code):
-        raise ValueError(f"Enter the {what} airport code (e.g. SEA).")
-    return code
+    """An airport code from a code, city or airport name (see ``airports``)."""
+    try:
+        return airports.resolve(text, what)
+    except ValueError:
+        code = str(text or "").strip().upper()
+        if AIRPORT.match(code):  # a code our list doesn't know: let FlightAware decide
+            return code
+        raise
 
 
 # --- normalising --------------------------------------------------------------

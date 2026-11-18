@@ -8,7 +8,7 @@ from django.urls import reverse
 from bdh_sdk import INFO, ON, WARN
 from bdh_sdk.storage import set_state_backend
 from bdh_sdk.testing import assert_plugin_importable
-from flights import aeroapi, homepage, store, worker
+from flights import aeroapi, airports, homepage, store, worker
 
 T0 = 1_800_000_000.0  # 2027-01-15 08:00 UTC
 H = 3600
@@ -96,9 +96,16 @@ class AeroApiTests(Fresh, TestCase):
         found = aeroapi.search("route", origin="sea", destination="SFO", date="2027-01-15", now=T0)
         self.assertTrue(self.get.call_args.args[0].endswith("/airports/SEA/flights/to/SFO"))
         self.assertEqual([f["ident"] for f in found], ["AS342"])
-        for o, d in (("SEA", "SEA"), ("", "SFO"), ("SEA", "San Francisco")):
+        for o, d in (("SEA", "SEA"), ("", "SFO"), ("SEA", "zzzz qqq")):
             with self.assertRaises(ValueError):
                 aeroapi.search("route", origin=o, destination=d, date="2027-01-15", now=T0)
+
+    def test_search_by_route_accepts_city_and_airport_names(self):
+        self.get.return_value = response(body={"flights": [{"segments": [fa()]}]})
+        for o, d in (("Seattle", "san francisco"), ("Seattle (SEA)", "San Francisco (SFO)"),
+                     ("seattle-tacoma", "KSFO")):
+            aeroapi.search("route", origin=o, destination=d, date="2027-01-15", now=T0)
+            self.assertTrue(self.get.call_args.args[0].endswith("/airports/SEA/flights/to/SFO"), (o, d))
 
     def test_search_date_limits(self):
         with self.assertRaises(ValueError):
@@ -369,6 +376,14 @@ class ViewTests(Fresh, TestCase):
     def post(self, name, body=None, *args):
         return self.client.post(reverse(name, args=args), body or {}, content_type="application/json")
 
+    def test_airport_lookup_endpoint_and_home(self):
+        r = self.client.get(reverse("flights_airports"), {"q": "seattle"})
+        self.assertEqual(r.json()["airports"][0]["code"], "SEA")
+        self.assertEqual(self.client.get(reverse("flights_airports")).json(), {"airports": []})
+        self.assertContains(self.client.get(reverse("flights_index")), "data-airports-url")
+        with patch("flights.airports.home", return_value={"code": "SEA", "city": "Seattle"}):
+            self.assertEqual(self.client.get(reverse("flights_state")).json()["home"]["code"], "SEA")
+
     def test_search_track_and_control(self):
         page = self.client.get(reverse("flights_index"))
         self.assertContains(page, "fl-initial")
@@ -407,6 +422,49 @@ class ViewTests(Fresh, TestCase):
         self.assertEqual(self.client.get(url).json()["position"]["alt_ft"], 30000)
         self.client.get(url)
         self.assertEqual(self.get.call_count, 1)
+
+
+class AirportTests(SimpleTestCase):
+    """Route search takes what people know (a city or airport name), not just codes."""
+
+    def codes(self, q):
+        return [a["code"] for a in airports.search(q)]
+
+    def test_every_airport_is_found_by_its_own_name(self):
+        # Catches folding bugs like the en dash in "Seattle–Tacoma" gluing two words together.
+        self.assertEqual(airports.fold("Seattle–Tacoma Montréal"), ["seattle", "tacoma", "montreal"])
+        missing = [a["code"] for a in airports._airports()
+                   if a["code"] not in {r["code"] for r in airports.search(f'{a["name"]} {a["city"]}', limit=50)}]
+        self.assertEqual(missing, [])
+
+    def test_search_by_city_name_code_and_icao(self):
+        for q, code in (("seattle", "SEA"), ("Seattle", "SEA"), ("san francisco", "SFO"), ("kona", "KOA"),
+                        ("SEA", "SEA"), ("sea", "SEA"), ("KSEA", "SEA"), ("vancouver", "YVR"),
+                        ("kamloops", "YKA"), ("montreal", "YUL"), ("montréal", "YUL"), ("heathrow", "LHR")):
+            self.assertEqual(self.codes(q)[:1], [code], q)
+        self.assertEqual(self.codes(""), [])
+        self.assertEqual(self.codes("zzzz qqq"), [])
+        self.assertLessEqual(len(airports.search("san")), 8)
+        a = airports.search("seattle")[0]
+        self.assertEqual(set(a), {"code", "name", "city", "place"})
+
+    def test_resolve(self):
+        for text in ("SEA", "seattle", "Seattle (SEA)", " Seattle (sea) ", "KSEA"):
+            self.assertEqual(airports.resolve(text, "origin"), "SEA", text)
+        for bad in ("", "  ", "zzzz qqq"):
+            with self.assertRaises(ValueError):
+                airports.resolve(bad, "origin")
+
+    def test_nearest_is_the_hub_home_airport(self):
+        self.assertEqual(airports.nearest(47.57, -122.22)["code"], "SEA")   # Mercer Island
+        self.assertEqual(airports.nearest(50.88, -119.89)["code"], "YKA")   # Sun Peaks
+        self.assertIsNone(airports.nearest(None, None))
+        with patch("bdh_sdk.location.location", return_value=None):
+            self.assertIsNone(airports.home())
+        with patch("bdh_sdk.location.location", side_effect=RuntimeError):
+            self.assertIsNone(airports.home())
+        with patch("bdh_sdk.location.location", return_value=MagicMock(latitude=47.57, longitude=-122.22)):
+            self.assertEqual(airports.home()["code"], "SEA")
 
 
 class PluginTests(SimpleTestCase):

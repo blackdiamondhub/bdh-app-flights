@@ -97,6 +97,17 @@ body.fl-page {
   border-radius: 14px; border: 1px solid #2b3d5c; background: #0f1828; color: #eef3fa; text-transform: uppercase;
 }
 .fl-in.fl-date { text-transform: none; color-scheme: dark; }
+.fl-in.fl-place { text-transform: none; }
+.fl-sugg { display: flex; flex-direction: column; border: 1px solid #2b3d5c; border-radius: 14px; overflow: hidden; }
+.fl-sugg[hidden] { display: none; }
+.fl-sugg div {
+  display: flex; align-items: center; gap: 12px; padding: 10px 14px; cursor: pointer; min-height: 30px;
+}
+.fl-sugg div + div { border-top: 1px solid #22324b; }
+.fl-sugg div:first-child, .fl-sugg div:active { background: #13243a; }
+.fl-sugg b { font-size: 17px; font-weight: 600; min-width: 44px; color: #5ba4e6; }
+.fl-sugg span { min-width: 0; }
+.fl-sugg small { display: block; color: #8fa3bd; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .fl-arrow { color: #8fa3bd; }
 .fl-results { display: flex; flex-direction: column; gap: 8px; }
 .fl-results:empty { display: none; }
