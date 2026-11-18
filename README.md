@@ -38,9 +38,10 @@ Each tracked flight is polled on a schedule that tightens as departure approache
 | From 2 h before until 20 min before | Every 10 min |
 | Within 20 min of departure, and while taxiing | Every 5 min |
 | In the air | Every 10 min |
-| Within 30 min of arrival | Every 5 min |
+| Within 30 min of touchdown | Every 5 min |
+| Within 15 min of touchdown, and after landing until the plane is at the gate (max 45 min) | Every minute |
 
-Polling stops once the flight lands or is cancelled.
+Polling stops once the flight is at the gate or is cancelled. Arrival times on the card are gate arrival times, as on FlightAware.
 
 The app keeps a spend ledger and stays under AeroAPI's rate limit. Every call is counted against `monthly_budget`.
 

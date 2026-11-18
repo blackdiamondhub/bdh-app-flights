@@ -26,6 +26,9 @@ ON_TIME = 5 * 60  # a delayed flight is "back on time" under this
 KEEP_LANDED = 3 * 3600
 KEEP_CANCELLED = 12 * 3600
 KEEP_STALE = 24 * 3600  # never seen to take off this long after it was due out
+FINAL_APPROACH = 15 * 60  # poll every minute from this long before touchdown until it's at the gate
+GATE_WAIT = 45 * 60  # stop waiting for a gate arrival this long after touchdown
+LANDING_NOW = 2 * 60
 
 SCHEDULED, TAXI, AIR, LANDED, CANCELLED, DIVERTED = "scheduled", "taxi", "air", "landed", "cancelled", "diverted"
 TIMES = tuple(f"{k}_{e}" for e in ("out", "off", "on", "in") for k in ("sched", "est", "act"))
@@ -374,11 +377,16 @@ def next_poll(f, now=None):
 
     More than a day out it waits until a day before; then hourly until two hours
     before, every 10 minutes after that (5 around departure) and every 10 minutes
-    in the air (5 in the last half hour).
+    in the air (5 in the last half hour, every minute in the last 15). After
+    touchdown it keeps checking every minute until the plane reaches the gate.
     """
     now = time.time() if now is None else now
     p = phase(f)
-    if p in (LANDED, CANCELLED, DIVERTED):
+    if p == LANDED:
+        if f.get("act_in") or not f.get("act_on") or now - f["act_on"] >= GATE_WAIT:
+            return None
+        return now + 60
+    if p in (CANCELLED, DIVERTED):
         return None
     if p in (SCHEDULED, TAXI) and not f.get("act_off"):
         dep = f.get("est_out") or f.get("sched_out")
@@ -393,6 +401,8 @@ def next_poll(f, now=None):
             return now + 300
         return now + 600
     arr = f.get("est_on") or f.get("est_in") or f.get("sched_in")
+    if arr is not None and arr - now <= FINAL_APPROACH:
+        return now + 60
     if arr is not None and arr - now <= 30 * 60:
         return now + 300
     return now + 600
@@ -457,13 +467,24 @@ def label(f, now=None):
         return "Cancelled", f"Was due out {clock(f.get('sched_out'), o.get('tz'), now)}"
     if p == DIVERTED:
         return "Diverted", f"Diverted from {d.get('code', '')}"
+    tz = d.get("tz")
+    gate = f.get("gate_in") or ""
     if p == LANDED:
-        when = f.get("act_in") or f.get("act_on")
-        return "Landed", f"Landed {clock(when, d.get('tz'), now)}"
+        if f.get("act_in"):
+            where = f"At gate {gate}" if gate else "At the gate"
+            return "Landed", f"{where} {clock(f['act_in'], tz, now)}"
+        taxi = f"Taxiing to {gate}" if gate else "Taxiing to the gate"
+        return "Landed", f"Landed {clock(f.get('act_on'), tz, now)} · {taxi}"
     if p == AIR:
-        arr = f.get("est_on") or f.get("est_in") or f.get("sched_in")
+        # Headline the gate arrival, as FlightAware and the airlines do; touchdown
+        # is several minutes earlier.
+        arr = f.get("est_in") or f.get("sched_in") or f.get("est_on")
+        touchdown = f.get("est_on")
+        if touchdown and touchdown - now <= LANDING_NOW:
+            at = f" · at gate ~{clock(arr, tz, now)}" if arr else ""
+            return "In air", f"Landing now{at}"
         left = f" · {span(arr - now)} left" if arr and arr > now else ""
-        return "In air", f"Lands {clock(arr, d.get('tz'), now)}{left}"
+        return "In air", f"Arrives {clock(arr, tz, now)}{left}"
     dep = f.get("act_out") or f.get("est_out") or f.get("sched_out")
     delay = dep_delay(f)
     late = f" (+{span(delay)})" if delay >= ON_TIME else ""

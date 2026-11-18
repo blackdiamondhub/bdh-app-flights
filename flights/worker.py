@@ -101,8 +101,8 @@ def describe(event, f, now=None):
         was = (f.get("notified") or {}).get("gate_from")
         body = f"Gate changed to {f.get('gate_out')}" + (f" (was {was})" if was else "")
     elif event == "departed":
-        arr = f.get("est_on") or f.get("est_in") or f.get("sched_in")
-        body = f"Took off · lands {store.clock(arr, d.get('tz'), now)}"
+        arr = f.get("est_in") or f.get("sched_in") or f.get("est_on")
+        body = f"Took off · arrives {store.clock(arr, d.get('tz'), now)}"
     elif event == "landed":
         body = f"Landed at {d.get('code', '')}" + (f" · bags at {f['baggage']}" if f.get("baggage") else "")
     elif event == "cancelled":
