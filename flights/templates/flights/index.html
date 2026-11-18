@@ -10,7 +10,8 @@
 
 {% block content %}
 <div class="fl-wrap" id="fl" data-state-url="{% url 'flights_state' %}" data-search-url="{% url 'flights_search' %}"
-     data-track-url="{% url 'flights_track' %}" data-base-url="{% url 'flights_index' %}">
+     data-track-url="{% url 'flights_track' %}" data-airports-url="{% url 'flights_airports' %}"
+     data-base-url="{% url 'flights_index' %}">
   {% csrf_token %}
   <div class="fl-head">
     <div>
@@ -45,10 +46,11 @@
       <input class="fl-in" id="fl-ident" maxlength="10" placeholder="Flight (e.g. AS342)" autocomplete="off">
     </div>
     <div class="fl-row" id="fl-by-route" hidden>
-      <input class="fl-in" id="fl-origin" maxlength="4" placeholder="From (SEA)" autocomplete="off">
+      <input class="fl-in fl-place" id="fl-origin" maxlength="60" placeholder="From: city or airport" autocomplete="off" spellcheck="false">
       <i class="fa-solid fa-arrow-right fl-arrow"></i>
-      <input class="fl-in" id="fl-dest" maxlength="4" placeholder="To (SFO)" autocomplete="off">
+      <input class="fl-in fl-place" id="fl-dest" maxlength="60" placeholder="To: city or airport" autocomplete="off" spellcheck="false">
     </div>
+    <div class="fl-sugg" id="fl-sugg" hidden></div>
     <div class="fl-row">
       <input class="fl-in fl-date" id="fl-date" type="date">
       <button class="fl-btn" id="fl-find"><i class="fa-solid fa-magnifying-glass"></i>Find</button>

@@ -143,6 +143,7 @@
     document.querySelectorAll("#fl-seg button").forEach(b => b.classList.toggle("on", b.dataset.mode === m));
     $("fl-by-ident").hidden = m !== "ident";
     $("fl-by-route").hidden = m !== "route";
+    hideSugg();
     const c = state.costs || {};
     $("fl-cost").textContent = `A search costs about ${Math.max(1, Math.round(100 * (m === "route" ? c.route : c.flights) || 1))}¢`;
   }
@@ -151,10 +152,53 @@
     $("fl-results").innerHTML = ""; $("fl-err").textContent = "";
     $("fl-track").disabled = true; $("fl-popups").checked = false;
     if (!$("fl-date").value) $("fl-date").value = today();
+    if (!$("fl-dest").value && state.home) choose($("fl-dest"), state.home);
     setMode(mode);
     $("fl-sheet").hidden = false;
     (mode === "ident" ? $("fl-ident") : $("fl-origin")).focus();
   }
+
+  // --- airport type-ahead (offline list on the server, no AeroAPI cost) ---
+  const sugg = $("fl-sugg");
+  let suggFor = null, suggList = [], suggSeq = 0;
+  const label = a => `${a.city || a.name} (${a.code})`;
+  function choose(input, a) {
+    input.value = label(a);
+    input.dataset.code = a.code;
+  }
+  function hideSugg() { sugg.hidden = true; sugg.innerHTML = ""; suggList = []; suggFor = null; }
+  async function suggest(input) {
+    const q = input.value.trim(), seq = ++suggSeq;
+    if (!q || input.dataset.code) { hideSugg(); return; }
+    try {
+      const r = await fetch(`${root.dataset.airportsUrl}?q=${encodeURIComponent(q)}`, {credentials: "same-origin"});
+      const data = r.ok ? await r.json() : {};
+      if (seq !== suggSeq || document.activeElement !== input) return;
+      suggList = data.airports || [];
+      suggFor = input;
+      sugg.innerHTML = suggList.map((a, i) => `<div data-i="${i}"><b>${esc(a.code)}</b>
+        <span>${esc(a.place || a.city)}<small>${esc(a.name)}</small></span></div>`).join("");
+      sugg.hidden = !suggList.length;
+    } catch (e) { /* typing still works; the server resolves names on Find */ }
+  }
+  ["fl-origin", "fl-dest"].forEach(id => {
+    const input = $(id);
+    input.addEventListener("input", () => {
+      delete input.dataset.code;
+      clearTimeout(suggest.t); suggest.t = setTimeout(() => suggest(input), 150);
+    });
+    input.addEventListener("focus", () => { if (input.dataset.code) input.select(); });
+    input.addEventListener("blur", () => setTimeout(() => { if (suggFor === input) hideSugg(); }, 150));
+  });
+  sugg.addEventListener("mousedown", e => e.preventDefault());  // keep focus in the input
+  sugg.addEventListener("click", e => {
+    const row = e.target.closest("[data-i]");
+    if (!row || !suggFor) return;
+    const input = suggFor;
+    choose(input, suggList[+row.dataset.i]);
+    hideSugg();
+    if (input.id === "fl-origin" && !$("fl-dest").dataset.code) $("fl-dest").focus();
+  });
   $("fl-new").addEventListener("click", openSheet);
   $("fl-cancel").addEventListener("click", () => { $("fl-sheet").hidden = true; });
   $("fl-seg").addEventListener("click", e => {
@@ -162,12 +206,14 @@
     if (b) setMode(b.dataset.mode);
   });
   async function find() {
+    hideSugg();
     $("fl-err").textContent = ""; $("fl-results").innerHTML = ""; picked = null; $("fl-track").disabled = true;
     const btn = $("fl-find");
     btn.disabled = true;
+    const place = el => el.dataset.code || el.value;
     try {
       const data = await post(root.dataset.searchUrl, {
-        mode, ident: $("fl-ident").value, origin: $("fl-origin").value, destination: $("fl-dest").value,
+        mode, ident: $("fl-ident").value, origin: place($("fl-origin")), destination: place($("fl-dest")),
         date: $("fl-date").value,
       });
       if (data.budget) state.budget = data.budget;
@@ -191,7 +237,15 @@
     $("fl-track").disabled = false;
   }
   $("fl-find").addEventListener("click", find);
-  ["fl-ident", "fl-origin", "fl-dest"].forEach(id => $(id).addEventListener("keydown", e => { if (e.key === "Enter") find(); }));
+  ["fl-ident", "fl-origin", "fl-dest"].forEach(id => $(id).addEventListener("keydown", e => {
+    if (e.key !== "Enter") return;
+    const input = e.target;
+    if (suggFor === input && suggList.length) {  // Enter takes the top suggestion
+      choose(input, suggList[0]); hideSugg();
+      if (input.id === "fl-origin" && !$("fl-dest").dataset.code) { $("fl-dest").focus(); return; }
+    }
+    find();
+  }));
   $("fl-results").addEventListener("click", e => {
     const o = e.target.closest(".fl-opt");
     if (o) pick(o);

@@ -7,6 +7,8 @@ Find a flight by number (`AS342`) or by route and date (`SEA → SFO`). Then tra
 - gates, delays and progress;
 - the aircraft's live position while it's in the air.
 
+For a route search you can type a city, an airport name or a code (IATA or ICAO). Suggestions appear as you type. The destination is filled in with the hub's nearest major airport. Lookups use a bundled copy of the [OurAirports](https://ourairports.com/data/) list, so they cost no AeroAPI calls. `tools/` regenerates it.
+
 Changes can be announced in two ways:
 
 - **Screen popups with a chime.** Turn these on or off per flight.
