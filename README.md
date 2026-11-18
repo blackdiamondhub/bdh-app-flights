@@ -45,6 +45,8 @@ Each tracked flight is polled on a schedule that tightens as departure approache
 
 Polling stops once the flight is at the gate or is cancelled. Arrival times on the card are gate arrival times, as on FlightAware.
 
+Finished flights drop off the list on their own: 10 minutes after touchdown, 12 hours after a cancelled or diverted flight's departure time, and 24 hours after the departure time of a flight that never took off.
+
 The app keeps a spend ledger and stays under AeroAPI's rate limit. Every call is counted against `monthly_budget`.
 
 ## Development
