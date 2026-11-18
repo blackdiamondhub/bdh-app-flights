@@ -29,7 +29,7 @@ def _error(msg, status=400):
 def _state():
     now = time.time()
     return {"now": now, "max": store.MAX_FLIGHTS, "has_key": bool(aeroapi.api_key()),
-            "budget": store.budget(now), "costs": aeroapi.COST, "home": airports.home(),
+            "budget": store.budget(now), "home": airports.home(),
             "flights": [store.snapshot(f, now) for f in store.flights()]}
 
 

@@ -28,7 +28,6 @@
     t.textContent = msg; t.hidden = false;
     clearTimeout(toast.t); toast.t = setTimeout(() => { t.hidden = true; }, 3000);
   }
-  const money = v => `$${Number(v || 0).toFixed(2)}`;
   const pillClass = p => p.toLowerCase().replace(/\s+/g, "-");
   function ago(sec) {
     const m = Math.round(sec / 60);
@@ -98,8 +97,6 @@
     const fl = state.flights || [];
     if (!fl.find(f => f.id === selected)) selected = fl.length ? fl[0].id : null;
     $("fl-count").textContent = fl.length ? `${fl.length} tracked` : "";
-    const b = state.budget || {};
-    $("fl-budget").textContent = b.limit != null ? `FlightAware ${money(b.spent)} / ${money(b.limit)} this month` : "";
     $("fl-nokey").hidden = !!state.has_key;
     $("fl-empty").hidden = fl.length > 0;
     $("fl-list").innerHTML = fl.map(card).join("");
@@ -113,7 +110,7 @@
     try {
       const r = await fetch(`${base}api/flights/${id}/position/`, {credentials: "same-origin"});
       const data = await r.json();
-      if (r.ok) { positions[id] = data.position; if (data.budget) state.budget = data.budget; render(); }
+      if (r.ok) { positions[id] = data.position; render(); }
     } catch (e) { /* leave it blank */ }
     setTimeout(() => { delete positions[id]; }, 5 * 60 * 1000);
   }
@@ -144,8 +141,6 @@
     $("fl-by-ident").hidden = m !== "ident";
     $("fl-by-route").hidden = m !== "route";
     hideSugg();
-    const c = state.costs || {};
-    $("fl-cost").textContent = `A search costs about ${Math.max(1, Math.round(100 * (m === "route" ? c.route : c.flights) || 1))}¢`;
   }
   function openSheet() {
     picked = null;
@@ -216,7 +211,6 @@
         mode, ident: $("fl-ident").value, origin: place($("fl-origin")), destination: place($("fl-dest")),
         date: $("fl-date").value,
       });
-      if (data.budget) state.budget = data.budget;
       const res = data.results || [];
       if (!res.length) { $("fl-err").textContent = "No flights found for that day."; return; }
       $("fl-results").innerHTML = res.map(f => {
