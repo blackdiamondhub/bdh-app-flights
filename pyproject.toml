@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "bdh-app-flights"
-version = "0.1.3b2"
+version = "0.1.3b3"
 description = "Black Diamond Hub app: track flights with FlightAware and get delay, gate and landing alerts"
 readme = "README.md"
 license = { text = "MIT" }

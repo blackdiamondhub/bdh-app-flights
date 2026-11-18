@@ -20,7 +20,6 @@ body.fl-page {
 .fl-head > div:first-child { flex: 1; }
 .fl-head h1 { margin: 0; font-size: 34px; font-weight: 300; }
 .fl-head p { margin: 2px 0 0; color: #8fa3bd; font-size: 14px; min-height: 17px; }
-.fl-budget { color: #8fa3bd; font-size: 14px; }
 .fl-warn {
   background: rgba(255, 179, 92, .12); border: 1px solid rgba(255, 179, 92, .35); color: #ffcf8f;
   border-radius: 16px; padding: 14px 18px; margin-bottom: 18px; display: flex; gap: 12px; align-items: center;
@@ -123,8 +122,7 @@ body.fl-page {
 .fl-check input:checked + .fl-tog { background: #5ba4e6; }
 .fl-check input:checked + .fl-tog::after { left: 21px; background: #fff; }
 .fl-err { color: #ff9c8a; min-height: 18px; font-size: 14px; }
-.fl-acts { display: flex; gap: 12px; align-items: center; }
-.fl-hint { flex: 1; color: #8fa3bd; font-size: 13px; }
+.fl-acts { display: flex; gap: 12px; align-items: center; justify-content: flex-end; }
 .fl-toast {
   position: fixed; left: 50%; bottom: 30px; transform: translateX(-50%); background: #22314d; color: #eef3fa;
   padding: 12px 22px; border-radius: 999px; z-index: 60; font-size: 15px;
