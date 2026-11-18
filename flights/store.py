@@ -23,7 +23,7 @@ SEARCH_TTL = 15 * 60
 POSITION_TTL = 5 * 60
 DELAY_STEP = 15 * 60  # announce a delay once it reaches, or moves by, this much
 ON_TIME = 5 * 60  # a delayed flight is "back on time" under this
-KEEP_LANDED = 3 * 3600
+KEEP_LANDED = 10 * 60  # after touchdown
 KEEP_CANCELLED = 12 * 3600
 KEEP_STALE = 24 * 3600  # never seen to take off this long after it was due out
 FINAL_APPROACH = 15 * 60  # poll every minute from this long before touchdown until it's at the gate
@@ -408,17 +408,22 @@ def next_poll(f, now=None):
     return now + 600
 
 
-def expired(f, now=None):
-    """Finished flights drop off after a while."""
-    now = time.time() if now is None else now
+def expires_at(f):
+    """When a finished flight drops off the list, or None while it's live."""
     p = phase(f)
     if p == LANDED:
-        return now - (f.get("act_in") or f.get("act_on")) > KEEP_LANDED
+        return (f.get("act_on") or f.get("act_in")) + KEEP_LANDED
     if p in (CANCELLED, DIVERTED):
-        return now - (f.get("sched_out") or now) > KEEP_CANCELLED
+        return f["sched_out"] + KEEP_CANCELLED if f.get("sched_out") else None
     if p == SCHEDULED and f.get("sched_out"):
-        return now - f["sched_out"] > KEEP_STALE
-    return False
+        return f["sched_out"] + KEEP_STALE
+    return None
+
+
+def expired(f, now=None):
+    now = time.time() if now is None else now
+    at = expires_at(f)
+    return at is not None and now > at
 
 
 def due(now=None):
@@ -438,7 +443,13 @@ def prune(now=None):
 
 
 def next_wake(now=None):
-    times = [f["next_poll"] for f in flights() if f.get("next_poll") is not None]
+    times = []
+    for f in flights():
+        if f.get("next_poll") is not None:
+            times.append(f["next_poll"])
+        at = expires_at(f)
+        if at is not None:
+            times.append(at + 1)  # expired() is strict
     return min(times) if times else None
 
 

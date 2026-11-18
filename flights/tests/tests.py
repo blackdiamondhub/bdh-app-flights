@@ -249,10 +249,26 @@ class StoreTests(Fresh, TestCase):
         landed = self.tracked(fa_flight_id="a", ident_iata="AS1")
         store.update(landed["id"], {"act_off": T0, "act_on": T0 + H}, T0 + H)
         self.tracked(fa_flight_id="b", ident_iata="AS2")
-        self.assertEqual(store.prune(T0 + 2 * H), [])
+        self.assertEqual(store.prune(T0 + H + 60), [])
         gone = store.prune(T0 + H + store.KEEP_LANDED + 1)
         self.assertEqual([f["ident"] for f in gone], ["AS1"])
         self.assertEqual([f["ident"] for f in store.flights()], ["AS2"])
+
+    def test_landed_drops_off_ten_minutes_after_touchdown(self):
+        # Timed from touchdown even while it's still taxiing to the gate.
+        f = self.tracked()
+        store.update(f["id"], {"act_off": T0 + 3 * H, "act_on": T0 + 5 * H}, T0 + 5 * H)
+        self.assertEqual(store.prune(T0 + 5 * H + 600), [])
+        self.assertEqual(len(store.prune(T0 + 5 * H + 601)), 1)
+
+    def test_poller_wakes_when_a_flight_expires(self):
+        # A flight with nothing left to poll must still be pruned on time,
+        # not up to five minutes late on the idle wake.
+        f = self.tracked()
+        store.update(f["id"], {"act_off": T0 + 3 * H, "act_on": T0 + 5 * H,
+                               "act_in": T0 + 5 * H + 300}, T0 + 5 * H + 300)
+        self.assertIsNone(store.flights()[0]["next_poll"])
+        self.assertEqual(store.next_wake(), T0 + 5 * H + store.KEEP_LANDED + 1)
 
     def test_labels(self):
         f = self.tracked()
