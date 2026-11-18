@@ -221,8 +221,22 @@ class StoreTests(Fresh, TestCase):
         self.assertEqual(at(sched_out=T0, act_out=T0), 300)
         self.assertEqual(at(act_off=T0 - H, est_on=T0 + H), 600)
         self.assertEqual(at(act_off=T0 - H, est_on=T0 + 1200), 300)
-        self.assertIsNone(store.next_poll({"act_on": T0}, T0))
+        self.assertEqual(at(act_off=T0 - H, est_on=T0 + store.FINAL_APPROACH, est_in=T0 + H), 60)
+        self.assertEqual(at(act_off=T0 - H, est_on=T0 - 60), 60)
+        # Landed but not yet at the gate: keep checking every minute, up to the cap.
+        self.assertEqual(at(act_on=T0), 60)
+        self.assertEqual(at(act_on=T0 - store.GATE_WAIT + 60), 60)
+        self.assertIsNone(store.next_poll({"act_on": T0 - store.GATE_WAIT}, T0))
+        self.assertIsNone(store.next_poll({"act_on": T0 - 300, "act_in": T0}, T0))
+        self.assertIsNone(store.next_poll({"act_in": T0}, T0))
         self.assertIsNone(store.next_poll({"cancelled": True}, T0))
+
+    def test_landing_keeps_polling_until_gate(self):
+        f = self.tracked()
+        f = store.update(f["id"], {"act_off": T0 + 3 * H, "act_on": T0 + 5 * H}, T0 + 5 * H)[0]
+        self.assertEqual(f["next_poll"], T0 + 5 * H + 60)
+        f = store.update(f["id"], {"act_in": T0 + 5 * H + 480}, T0 + 5 * H + 480)[0]
+        self.assertIsNone(f["next_poll"])
 
     def test_prune(self):
         landed = self.tracked(fa_flight_id="a", ident_iata="AS1")
@@ -238,11 +252,23 @@ class StoreTests(Fresh, TestCase):
         self.assertEqual(store.label(f, T0), ("Scheduled", "Departs 11:00 AM"))
         f["est_out"] += 30 * 60
         self.assertEqual(store.label(f, T0), ("Delayed", "Departs 11:30 AM (+30m)"))
-        f.update(act_out=T0 + 3.5 * H, act_off=T0 + 3.6 * H, est_on=T0 + 5 * H)
-        self.assertEqual(store.label(f, T0 + 4 * H), ("In air", "Lands 1:00 PM · 1h 0m left"))
+        f.update(act_out=T0 + 3.5 * H, act_off=T0 + 3.6 * H, est_on=T0 + 4.9 * H)
+        # Headline is the gate time (est_in), not touchdown (est_on).
+        self.assertEqual(store.label(f, T0 + 4 * H), ("In air", "Arrives 1:00 PM · 1h 0m left"))
+        self.assertEqual(store.label(f, T0 + 4.9 * H - 60), ("In air", "Landing now · at gate ~1:00 PM"))
+        self.assertEqual(store.label(f, T0 + 4.9 * H + 120), ("In air", "Landing now · at gate ~1:00 PM"))
         snap = store.snapshot(f, T0)
         self.assertEqual((snap["phase"], snap["labels"]["sched_out"]), ("air", "11:00 AM"))
         self.assertNotIn("notified", snap)
+        f.update(act_on=T0 + 4.9 * H)
+        self.assertEqual(store.label(f, T0 + 4.95 * H), ("Landed", "Landed 12:54 PM · Taxiing to the gate"))
+        f["gate_in"] = "C10"
+        self.assertEqual(store.label(f, T0 + 4.95 * H), ("Landed", "Landed 12:54 PM · Taxiing to C10"))
+        f["act_in"] = T0 + 5 * H + 120
+        self.assertEqual(store.label(f, T0 + 5.1 * H), ("Landed", "At gate C10 1:02 PM"))
+        del f["gate_in"]
+        self.assertEqual(store.label(f, T0 + 5.1 * H), ("Landed", "At the gate 1:02 PM"))
+        self.assertEqual(store.snapshot(f, T0)["phase"], "landed")
 
 
 class WorkerTests(Fresh, TestCase):

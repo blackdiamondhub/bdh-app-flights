@@ -60,7 +60,7 @@
     const L = f.labels || {}, o = f.origin || {}, d = f.destination || {};
     const pct = progress(f);
     const left = f.act_off ? `Off ${L.act_off}` : `Departs ${L.est_out || L.sched_out}`;
-    const right = f.act_on ? `Landed ${L.act_on}` : `${f.phase === "air" ? "Lands ~" : "Arrives "}${L.est_on || L.est_in || L.sched_in}`;
+    const right = f.act_in ? `At gate ${L.act_in}` : f.act_on ? `Landed ${L.act_on}` : `Arrives ${L.est_in || L.sched_in || L.est_on}`;
     const plane = f.phase === "air" ? `<b style="left:${pct}%"><i class="fa-solid fa-plane"></i></b>` : "";
     const depGate = [f.terminal_out && `Terminal ${esc(f.terminal_out)}`, f.gate_out && `Gate ${esc(f.gate_out)}`].filter(Boolean).join(" · ") || "—";
     const arrGate = [f.gate_in && `Gate ${esc(f.gate_in)}`, f.baggage && `Bags ${esc(f.baggage)}`].filter(Boolean).join(" · ") || "—";
