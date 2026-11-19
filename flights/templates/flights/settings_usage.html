@@ -65,14 +65,4 @@
     {% endfor %}
 </div>
 {% endif %}
-
-<div class="hst-card">
-    <div class="hst-row">
-        <div class="lbl">
-            <b>Monthly limit: {% if limit %}${{ limit }}{% else %}Off{% endif %}</b>
-            <small>Change it under Flights in Settings. Lookups stop when FlightAware's total for the month reaches it.
-                The Personal tier includes $5 of free usage a month.</small>
-        </div>
-    </div>
-</div>
 {% endblock %}
