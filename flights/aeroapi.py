@@ -1,12 +1,15 @@
 """FlightAware AeroAPI v4 client.
 
 Every request is billed per result set (up to 15 records), so each call asks
-for one page only, is charged to the monthly ledger *before* it is made, and
-is refused once the budget is spent. A local limiter keeps us under the
-Personal tier's 10 result sets a minute.
+for one page only. Before a call is made, this month's spend is checked
+against the admin's monthly limit: FlightAware's own usage total (the free
+``/account/usage``, cached for a few minutes) plus what we've spent since it
+was fetched. If FlightAware's usage can't be read, the local ledger stands in.
+A local limiter keeps us under the Personal tier's 10 result sets a minute.
 """
 import collections
 import datetime as dt
+import logging
 import re
 import threading
 import time
@@ -15,10 +18,15 @@ import requests
 
 from . import airports, store
 
+log = logging.getLogger(__name__)
 BASE = "https://aeroapi.flightaware.com/aeroapi"
 TIMEOUT = 15
-# Dollars per result set (AeroAPI Personal pricing; route searches are dearer).
-COST = {"flights": 0.005, "schedules": 0.005, "route": 0.02, "position": 0.01}
+# Dollars per result set, as FlightAware bills them (route searches are dearest).
+COST = {"flights": 0.005, "schedules": 0.02, "route": 0.05, "position": 0.01}
+USAGE_TTL = 5 * 60
+USAGE_TIMEOUT = 8
+WARN_AT = 0.95
+OK, WARN, OUT, OFF = "ok", "warn", "out", "off"
 RATE = 9  # calls per RATE_S
 RATE_S = 60
 LIVE_AHEAD = 2 * 86400  # /flights and /airports only see two days ahead...
@@ -40,7 +48,7 @@ class NoKey(ApiError):
 
 class BudgetExhausted(ApiError):
     def __init__(self):
-        super().__init__("This month's FlightAware budget is used up.")
+        super().__init__("This month's FlightAware limit is reached. An admin can raise it in Settings.")
 
 
 class RateLimited(ApiError):
@@ -74,14 +82,120 @@ def reset_rate():
         _calls.clear()
 
 
+# --- monthly usage --------------------------------------------------------------
+
+_usage = {}
+_usage_lock = threading.Lock()
+# (label, test on the operation, e.g. "GET /flights/{ident}"), first match wins.
+KINDS = (
+    ("Route search", lambda op: "/flights/to/" in op),
+    ("Date search", lambda op: "/schedules" in op),
+    ("Live position", lambda op: op.rstrip("/").endswith("/position")),
+    ("Flight status", lambda op: op.split(" ", 1)[-1].startswith("/flights/")),
+)
+
+
+def _kind(op):
+    for label, test in KINDS:
+        if test(op or ""):
+            return label
+    return "Other"
+
+
+def month_start(now):
+    d = dt.datetime.fromtimestamp(now, dt.timezone.utc)
+    return d.replace(day=1, hour=0, minute=0, second=0, microsecond=0).timestamp()
+
+
+def _fetch_usage(now):
+    """This month's usage from FlightAware (a free call), or None if it can't be read."""
+    key = api_key()
+    if not key:
+        return None
+    try:
+        r = requests.get(BASE + "/account/usage", params={"start": iso(month_start(now))}, timeout=USAGE_TIMEOUT,
+                         headers={"x-apikey": key, "Accept": "application/json"})
+        if r.status_code != 200:
+            log.warning("flights: FlightAware usage returned %s", r.status_code)
+            return None
+        data = r.json()
+        total = float(data["total_cost"])
+        parts = {}
+        for item in data.get("resource_details") or []:
+            label = _kind(item.get("operation"))
+            p = parts.setdefault(label, {"label": label, "calls": 0, "cost": 0.0})
+            p["calls"] += int(item.get("total_resource_calls") or 0)
+            p["cost"] = round(p["cost"] + float(item.get("resource_cost") or 0), 4)
+    except (requests.RequestException, ValueError, KeyError, TypeError, AttributeError) as exc:
+        log.warning("flights: couldn't read FlightAware usage (%s)", exc.__class__.__name__)
+        return None
+    order = [k for k, _ in KINDS] + ["Other"]
+    return {"total": round(total, 4), "calls": int(data.get("total_calls") or 0),
+            "parts": sorted(parts.values(), key=lambda p: order.index(p["label"]))}
+
+
+def usage(now=None, force=False):
+    """This month's usage: FlightAware's figures, refreshed every few minutes.
+
+    ``ok`` is False when FlightAware has never answered this month; ``stale``
+    when the last refresh failed and older figures are shown. ``ledger_at`` is
+    our own ledger's spend when the figures were fetched.
+    """
+    now = time.time() if now is None else now
+    m = store.month(now)
+    with _usage_lock:
+        if force or _usage.get("month") != m or now - _usage.get("at", 0) >= USAGE_TTL:
+            got = _fetch_usage(now)
+            ledger = store.budget(now)["spent"]
+            if got is not None:
+                _usage.clear()
+                _usage.update(got, month=m, at=now, fetched_at=now, ok=True, stale=False, ledger_at=ledger)
+            elif _usage.get("month") == m and _usage.get("ok"):
+                _usage.update(at=now, stale=True)  # keep the last figures; retry after USAGE_TTL
+            else:
+                _usage.clear()
+                _usage.update(month=m, at=now, fetched_at=None, ok=False, stale=False, ledger_at=ledger)
+        return dict(_usage)
+
+
+def reset_usage():
+    with _usage_lock:
+        _usage.clear()
+
+
+def spent(now=None):
+    """(dollars spent this month, from FlightAware?) including our calls since the last fetch."""
+    now = time.time() if now is None else now
+    u = usage(now)
+    local = store.budget(now)["spent"]
+    if u["ok"]:
+        return round(u["total"] + max(0.0, local - u["ledger_at"]), 4), True
+    return local, False
+
+
+def level(now=None):
+    """OK, WARN (95% of the limit), OUT (limit reached) or OFF (a $0 limit)."""
+    limit = store.budget_limit()
+    if limit <= 0:
+        return OFF
+    if not api_key():
+        return OK
+    s, _ = spent(now)
+    if s + min(COST.values()) > limit + 1e-9:
+        return OUT
+    return WARN if s >= WARN_AT * limit else OK
+
+
 def _get(path, params, kind, now=None):
     key = api_key()
     if not key:
         raise NoKey()
     now = time.time() if now is None else now
-    _reserve(now)
-    if not store.spend(COST[kind], now):
+    limit = store.budget_limit()
+    if limit <= 0 or spent(now)[0] + COST[kind] > limit + 1e-9:
         raise BudgetExhausted()
+    _reserve(now)
+    store.spend(COST[kind], now)
     try:
         r = requests.get(BASE + path, params={**params, "max_pages": 1}, timeout=TIMEOUT,
                          headers={"x-apikey": key, "Accept": "application/json"})

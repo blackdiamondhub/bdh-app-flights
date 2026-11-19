@@ -98,6 +98,13 @@
     if (!fl.find(f => f.id === selected)) selected = fl.length ? fl[0].id : null;
     $("fl-count").textContent = fl.length ? `${fl.length} tracked` : "";
     $("fl-nokey").hidden = !!state.has_key;
+    const usageMsg = {
+      warn: "Nearly at this month's FlightAware limit. An admin can raise it in Settings.",
+      out: "This month's FlightAware limit is reached, so flights won't update until an admin raises it in Settings.",
+      off: "FlightAware lookups are turned off in Settings.",
+    }[state.usage];
+    $("fl-usage").hidden = !state.has_key || !usageMsg;
+    $("fl-usage-text").textContent = usageMsg || "";
     $("fl-empty").hidden = fl.length > 0;
     $("fl-list").innerHTML = fl.map(card).join("");
     const cur = fl.find(f => f.id === selected);

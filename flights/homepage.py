@@ -1,6 +1,6 @@
 from bdh_sdk import INFO, ON, WARN, Action, Status, StatusRow
 
-from . import store, worker
+from . import aeroapi, store, worker
 
 ICONS = {"remove": ("fa-solid fa-times", "Stop tracking")}
 
@@ -31,9 +31,14 @@ def status():
     else:
         f = min(flights, key=lambda x: store.dep_time(x) or float("inf"))
         text, level = f"{f['ident']} {store.label(f)[1]}", INFO
-    b = store.budget()
-    if b["limit"] and b["left"] <= 0:
-        text, level = "FlightAware budget used up", WARN
+    try:
+        lv = aeroapi.level()
+    except Exception:
+        lv = aeroapi.OK
+    if lv in (aeroapi.OUT, aeroapi.OFF):
+        text, level = "FlightAware limit reached" if lv == aeroapi.OUT else "FlightAware lookups off", WARN
+    elif lv == aeroapi.WARN and not trouble:
+        text, level = "Nearly at FlightAware limit", WARN
     return Status(text, level=level, rows=tuple(rows), refresh=60)
 
 

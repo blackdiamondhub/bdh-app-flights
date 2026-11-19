@@ -1,9 +1,11 @@
+import datetime as dt
 import json
 import logging
 import time
 
+from bdh_sdk import is_admin
 from django.http import Http404, JsonResponse
-from django.shortcuts import render
+from django.shortcuts import redirect, render
 from django.views.decorators.clickjacking import xframe_options_sameorigin
 from django.views.decorators.http import require_GET, require_POST
 
@@ -29,8 +31,39 @@ def _error(msg, status=400):
 def _state():
     now = time.time()
     return {"now": now, "max": store.MAX_FLIGHTS, "has_key": bool(aeroapi.api_key()),
-            "budget": store.budget(now), "home": airports.home(),
+            "usage": aeroapi.level(now), "home": airports.home(),
             "flights": [store.snapshot(f, now) for f in store.flights()]}
+
+
+def _ago(seconds):
+    if seconds < 90:
+        return "just now"
+    if seconds < 3600:
+        return f"{round(seconds / 60)} min ago"
+    return f"{round(seconds / 3600)} h ago"
+
+
+def usage_page(request):
+    if not is_admin(request):
+        raise Http404
+    now = time.time()
+    if request.method == "POST":
+        aeroapi.usage(now, force=True)
+        return redirect("flights_usage")
+    has_key = bool(aeroapi.api_key())
+    u = aeroapi.usage(now) if has_key else {"ok": False}
+    total, real = aeroapi.spent(now) if has_key else (store.budget(now)["spent"], False)
+    limit = store.budget_limit()
+    d = dt.datetime.fromtimestamp(now, dt.timezone.utc)
+    reset = (d.replace(day=28) + dt.timedelta(days=4)).replace(day=1)
+    return render(request, "flights/settings_usage.html", {
+        "active": store.APP, "has_key": has_key, "real": real, "stale": u.get("stale"),
+        "ago": _ago(now - u["fetched_at"]) if u.get("fetched_at") else "",
+        "total": total, "calls": u.get("calls", 0), "parts": u.get("parts", []), "limit": limit,
+        "pct": min(100, round(100 * total / limit, 1)) if limit else 100,
+        "level": aeroapi.level(now) if has_key else aeroapi.OK,
+        "month": d.strftime("%B"), "reset": f"{reset.strftime('%b')} {reset.day}",
+    })
 
 
 def index(request):
@@ -73,7 +106,7 @@ def search(request):
         snap = store.snapshot(cand, now)
         snap["ref"] = f"{key}:{n}"
         results.append(snap)
-    return JsonResponse({"results": results, "budget": store.budget(now)})
+    return JsonResponse({"results": results, "usage": aeroapi.level(now)})
 
 
 @require_POST
@@ -121,4 +154,4 @@ def position(request, flight_id):
         except aeroapi.ApiError as exc:
             return _error(exc, status=502)
         store.save_position(flight_id, pos)
-    return JsonResponse({"position": pos, "budget": store.budget()})
+    return JsonResponse({"position": pos})

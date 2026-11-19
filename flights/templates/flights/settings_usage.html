@@ -1,0 +1,78 @@
+{% extends 'hub_settings/_layout.html' %}
+
+{% block title %}FlightAware usage · Settings{% endblock %}
+
+{% block section %}
+<style>
+    .fu-big { padding: 20px 22px 6px; font-size: 48px; font-weight: 300; }
+    .fu-big small { font-size: 22px; color: var(--mut); }
+    .fu-bar { height: 14px; margin: 8px 22px 6px; border-radius: 999px; background: rgba(255,255,255,.08); overflow: hidden; }
+    .fu-bar i { display: block; height: 100%; border-radius: 999px; background: var(--acc); }
+    .fu-bar.warn i { background: #ffcf8f; }
+    .fu-bar.out i { background: var(--red); }
+    .fu-row .lbl small { margin-top: 0; }
+    .fu-n { color: var(--mut); font-size: 15px; min-width: 90px; text-align: right; }
+    .fu-c { font-size: 16px; min-width: 70px; text-align: right; }
+</style>
+
+<div class="hst-head">
+    <div>
+        <h2>FlightAware usage</h2>
+        <p>{{ month }} · resets {{ reset }} (UTC)</p>
+    </div>
+    {% if has_key %}
+    <form method="post" class="act">
+        {% csrf_token %}
+        <button class="hst-btn ghost">Refresh</button>
+    </form>
+    {% endif %}
+</div>
+
+{% if not has_key %}
+<div class="hst-note bad">There's no FlightAware AeroAPI key yet. Add one under Flights in Settings.</div>
+{% elif level == 'off' %}
+<div class="hst-note bad">The monthly limit is Off, so flights aren't looked up or updated.</div>
+{% elif level == 'out' %}
+<div class="hst-note bad">This month's limit is reached, so flights won't update until {{ reset }} or until the limit is raised.</div>
+{% elif level == 'warn' %}
+<div class="hst-note bad">Nearly at this month's limit.</div>
+{% endif %}
+{% if has_key and not real %}
+<div class="hst-note bad">Couldn't reach FlightAware for its figures. Showing this hub's own count instead.</div>
+{% elif stale %}
+<div class="hst-note bad">Couldn't reach FlightAware just now. Showing its figures from {{ ago }}.</div>
+{% endif %}
+
+<div class="hst-card">
+    <div class="fu-big">${{ total|floatformat:2 }} <small>of {% if limit %}${{ limit }}{% else %}$0 (Off){% endif %}</small></div>
+    <div class="fu-bar {{ level }}"><i style="width: {{ pct|stringformat:'s' }}%"></i></div>
+    <div class="hst-row">
+        <div class="lbl"><small>
+            {% if real %}From FlightAware {{ ago }} · {{ calls }} lookup{{ calls|pluralize }}{% else %}This hub's own count{% endif %}
+        </small></div>
+    </div>
+</div>
+
+{% if parts %}
+<div class="hst-card">
+    <h3>This month by lookup</h3>
+    {% for p in parts %}
+    <div class="hst-row fu-row">
+        <div class="lbl"><b>{{ p.label }}</b>{% if p.label == 'Other' %}<small>Calls not made by this hub</small>{% endif %}</div>
+        <span class="fu-n">{{ p.calls }} call{{ p.calls|pluralize }}</span>
+        <span class="fu-c">${{ p.cost|floatformat:2 }}</span>
+    </div>
+    {% endfor %}
+</div>
+{% endif %}
+
+<div class="hst-card">
+    <div class="hst-row">
+        <div class="lbl">
+            <b>Monthly limit: {% if limit %}${{ limit }}{% else %}Off{% endif %}</b>
+            <small>Change it under Flights in Settings. Lookups stop when FlightAware's total for the month reaches it.
+                The Personal tier includes $5 of free usage a month.</small>
+        </div>
+    </div>
+</div>
+{% endblock %}
