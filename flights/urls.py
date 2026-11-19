@@ -4,6 +4,7 @@ from . import views
 
 urlpatterns = [
     path("", views.index, name="flights_index"),
+    path("settings/usage/", views.usage_page, name="flights_usage"),
     path("popup/<str:flight_id>/", views.popup, name="flights_popup"),
     path("api/state/", views.state, name="flights_state"),
     path("api/search/", views.search, name="flights_search"),

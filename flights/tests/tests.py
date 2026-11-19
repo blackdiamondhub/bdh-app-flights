@@ -40,9 +40,14 @@ class Fresh:
         set_state_backend(None)
         store.reset_cache()
         aeroapi.reset_rate()
+        aeroapi.reset_usage()
         self.addCleanup(store.reset_cache)
         self.addCleanup(aeroapi.reset_rate)
+        self.addCleanup(aeroapi.reset_usage)
         patch.object(store, "hub_tz", return_value=dt.timezone.utc).start()
+        # FlightAware's usage figures; None = unreachable, so spend falls back to our ledger.
+        self.fetch_patch = patch.object(aeroapi, "_fetch_usage", return_value=None)
+        self.fetch = self.fetch_patch.start()
         self.addCleanup(patch.stopall)
 
     def tracked(self, now=T0, popups=False, **kw):
@@ -132,6 +137,64 @@ class AeroApiTests(Fresh, TestCase):
             aeroapi._get("/x", {}, "flights", T0 + 30)
         aeroapi._get("/x", {}, "flights", T0 + 61)  # the first call has aged out
 
+    def usage_body(self):
+        return {"total_calls": 17, "total_cost": 0.21, "resource_details": [
+            {"operation": "GET /flights/{ident}", "total_resource_calls": 6, "resource_cost": 0.03},
+            {"operation": "GET /flights/{id}/position", "total_resource_calls": 3, "resource_cost": 0.03},
+            {"operation": "GET /airports/{id}/flights/to/{dest_id}", "total_resource_calls": 1, "resource_cost": 0.05},
+            {"operation": "GET /schedules/{date_start}/{date_end}", "total_resource_calls": 4, "resource_cost": 0.08},
+            {"operation": "GET /operators/{id}", "total_resource_calls": 3, "resource_cost": 0.02}]}
+
+    def test_reads_usage_from_flightaware(self):
+        self.fetch_patch.stop()
+        self.get.return_value = response(body=self.usage_body())
+        u = aeroapi.usage(T0)
+        url, = self.get.call_args.args
+        self.assertTrue(url.endswith("/account/usage"))
+        self.assertEqual(self.get.call_args.kwargs["params"], {"start": "2027-01-01T00:00:00Z"})
+        self.assertEqual((u["ok"], u["total"], u["calls"]), (True, 0.21, 17))
+        self.assertEqual([(p["label"], p["calls"], p["cost"]) for p in u["parts"]],
+                         [("Route search", 1, 0.05), ("Date search", 4, 0.08), ("Live position", 3, 0.03),
+                          ("Flight status", 6, 0.03), ("Other", 3, 0.02)])
+        aeroapi.usage(T0 + aeroapi.USAGE_TTL - 1)
+        self.assertEqual(self.get.call_count, 1)  # cached
+        aeroapi.usage(T0 + aeroapi.USAGE_TTL)
+        self.assertEqual(self.get.call_count, 2)
+        for bad in (response(500), response(body={"nope": 1})):
+            self.get.return_value = bad
+            self.assertIsNone(aeroapi._fetch_usage(T0))
+
+    def test_limit_uses_flightaware_total(self):
+        self.fetch.return_value = {"total": 4.9, "calls": 99, "parts": []}
+        self.assertEqual(aeroapi.spent(T0), (4.9, True))
+        self.assertEqual(aeroapi.level(T0), aeroapi.WARN)
+        aeroapi._get("/x", {}, "flights", T0)  # 4.905 so far: still under $5
+        self.assertEqual(aeroapi.spent(T0), (4.905, True))  # our calls since the fetch are added on
+        self.fetch.return_value = {"total": 4.996, "calls": 99, "parts": []}
+        aeroapi.usage(T0, force=True)
+        with self.assertRaises(aeroapi.BudgetExhausted):
+            aeroapi._get("/x", {}, "schedules", T0)
+        self.assertEqual(aeroapi.level(T0), aeroapi.OUT)
+        self.assertEqual(self.get.call_count, 1)
+        with patch.object(store, "budget_limit", return_value=10):
+            self.assertEqual(aeroapi.level(T0), aeroapi.OK)
+        with patch.object(store, "budget_limit", return_value=0):
+            self.assertEqual(aeroapi.level(T0), aeroapi.OFF)
+
+    def test_unreachable_usage(self):
+        # Never reached this month: our own ledger.
+        store.spend(1.0, T0)
+        self.assertEqual(aeroapi.spent(T0), (1.0, False))
+        # Reached once, then unreachable: the last figures, marked stale.
+        self.fetch.return_value = {"total": 2.0, "calls": 9, "parts": []}
+        aeroapi.usage(T0, force=True)
+        self.fetch.return_value = None
+        u = aeroapi.usage(T0 + aeroapi.USAGE_TTL)
+        self.assertEqual((u["ok"], u["stale"], u["total"], u["fetched_at"]), (True, True, 2.0, T0))
+        self.assertEqual(aeroapi.spent(T0 + aeroapi.USAGE_TTL), (2.0, True))
+        # A new month starts over.
+        self.assertFalse(aeroapi.usage(T0 + 40 * 86400)["ok"])
+
     def test_http_errors(self):
         self.get.return_value = response(404)
         self.assertEqual(aeroapi._get("/x", {}, "flights", T0), {})
@@ -188,10 +251,10 @@ class StoreTests(Fresh, TestCase):
 
     def test_ledger_survives_restart(self):
         self.assertTrue(store.spend(4.99, T0))
-        self.assertFalse(store.spend(0.02, T0))
+        self.assertTrue(store.spend(0.02, T0))  # the limit is enforced in aeroapi, not the ledger
         store.reset_cache()
         b = store.budget(T0)
-        self.assertEqual((b["spent"], b["calls"], b["month"]), (4.99, 1, "2027-01"))
+        self.assertEqual((b["spent"], b["calls"], b["month"]), (5.01, 2, "2027-01"))
         self.assertEqual(store.budget(T0 + 40 * 86400)["spent"], 0)
 
     def test_events(self):
@@ -228,21 +291,19 @@ class StoreTests(Fresh, TestCase):
         self.assertEqual(at(sched_out=T0, act_out=T0), 300)
         self.assertEqual(at(act_off=T0 - H, est_on=T0 + H), 600)
         self.assertEqual(at(act_off=T0 - H, est_on=T0 + 1200), 300)
-        self.assertEqual(at(act_off=T0 - H, est_on=T0 + store.FINAL_APPROACH, est_in=T0 + H), 60)
-        self.assertEqual(at(act_off=T0 - H, est_on=T0 - 60), 60)
-        # Landed but not yet at the gate: keep checking every minute, up to the cap.
-        self.assertEqual(at(act_on=T0), 60)
-        self.assertEqual(at(act_on=T0 - store.GATE_WAIT + 60), 60)
-        self.assertIsNone(store.next_poll({"act_on": T0 - store.GATE_WAIT}, T0))
+        self.assertEqual(at(act_off=T0 - H, est_on=T0 + store.FINAL_APPROACH, est_in=T0 + H), 120)
+        self.assertEqual(at(act_off=T0 - H, est_on=T0 - 60), 120)
+        # Touchdown is the end: no polling for the gate.
+        self.assertIsNone(store.next_poll({"act_on": T0}, T0))
         self.assertIsNone(store.next_poll({"act_on": T0 - 300, "act_in": T0}, T0))
         self.assertIsNone(store.next_poll({"act_in": T0}, T0))
         self.assertIsNone(store.next_poll({"cancelled": True}, T0))
 
-    def test_landing_keeps_polling_until_gate(self):
+    def test_stops_polling_at_touchdown(self):
         f = self.tracked()
-        f = store.update(f["id"], {"act_off": T0 + 3 * H, "act_on": T0 + 5 * H}, T0 + 5 * H)[0]
-        self.assertEqual(f["next_poll"], T0 + 5 * H + 60)
-        f = store.update(f["id"], {"act_in": T0 + 5 * H + 480}, T0 + 5 * H + 480)[0]
+        f = store.update(f["id"], {"act_off": T0 + 3 * H, "est_on": T0 + 5 * H}, T0 + 5 * H - 300)[0]
+        self.assertEqual(f["next_poll"], T0 + 5 * H - 300 + 120)
+        f = store.update(f["id"], {"act_on": T0 + 5 * H}, T0 + 5 * H)[0]
         self.assertIsNone(f["next_poll"])
 
     def test_prune(self):
@@ -373,8 +434,14 @@ class HomepageTests(Fresh, TestCase):
         store.update(f["id"], {"cancelled": True})
         s = homepage.status()
         self.assertEqual((s.level, s.text, s.rows[0].dimmed), (WARN, "AS342 cancelled", True))
+        patch.object(aeroapi, "api_key", return_value="k").start()
         store.spend(store.budget_limit())
-        self.assertEqual(homepage.status().text, "FlightAware budget used up")
+        self.assertEqual(homepage.status().text, "FlightAware limit reached")
+        aeroapi.reset_usage()
+        with patch.object(store, "budget_limit", return_value=0):
+            self.assertEqual(homepage.status().text, "FlightAware lookups off")
+        with patch.object(aeroapi, "level", side_effect=RuntimeError):
+            self.assertEqual(homepage.status().text, "AS342 cancelled")  # status never fails on usage
         with patch("bdh_sdk.alerts.dismiss"):
             self.assertEqual(homepage.run_action(f["id"], "remove"), "Stopped tracking AS342")
         self.assertEqual(store.flights(), [])
@@ -412,6 +479,9 @@ class ViewTests(Fresh, TestCase):
         state = self.post("flights_track", {"ref": res["ref"], "popups": True}).json()
         (f,) = state["flights"]
         self.assertTrue(f["popups"] and state["has_key"])
+        self.assertEqual(state["usage"], aeroapi.OK)
+        self.assertNotIn("budget", state)  # no money figures in the app itself
+        self.assertNotIn("budget", r.json())
         self.assertEqual(self.post("flights_track", {"ref": res["ref"]}).status_code, 400)
         self.assertFalse(self.post("flights_control", {}, f["id"], "popups_off").json()["flights"][0]["popups"])
         self.post("flights_control", {}, f["id"], "refresh")  # just looked up: no new call
@@ -439,8 +509,24 @@ class ViewTests(Fresh, TestCase):
         self.client.get(url)
         self.assertEqual(self.get.call_count, 1)
 
-
-class AirportTests(SimpleTestCase):
+    def test_usage_page_is_admin_only(self):
+        url = reverse("flights_usage")
+        with patch("flights.views.is_admin", return_value=False):
+            self.assertEqual(self.client.get(url).status_code, 404)
+            self.assertEqual(self.client.post(url).status_code, 404)
+        self.fetch.return_value = {"total": 4.8, "calls": 17, "parts": [
+            {"label": "Flight status", "calls": 6, "cost": 0.03}]}
+        with patch("flights.views.is_admin", return_value=True):
+            page = self.client.get(url)
+            self.assertContains(page, "$4.80")
+            self.assertContains(page, "Flight status")
+            self.assertContains(page, "Nearly at this month")
+            self.assertEqual(self.client.get(reverse("flights_state")).json()["usage"], aeroapi.WARN)
+            self.assertRedirects(self.client.post(url), url, fetch_redirect_response=False)
+            self.assertEqual(self.fetch.call_count, 2)  # Refresh skips the cache
+            self.fetch.return_value = None
+            aeroapi.reset_usage()
+            self.assertContains(self.client.get(url), "this hub's own count")
     """Route search takes what people know (a city or airport name), not just codes."""
 
     def codes(self, q):

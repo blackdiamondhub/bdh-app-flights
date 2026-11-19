@@ -26,8 +26,7 @@ ON_TIME = 5 * 60  # a delayed flight is "back on time" under this
 KEEP_LANDED = 10 * 60  # after touchdown
 KEEP_CANCELLED = 12 * 3600
 KEEP_STALE = 24 * 3600  # never seen to take off this long after it was due out
-FINAL_APPROACH = 15 * 60  # poll every minute from this long before touchdown until it's at the gate
-GATE_WAIT = 45 * 60  # stop waiting for a gate arrival this long after touchdown
+FINAL_APPROACH = 15 * 60  # poll every 2 minutes from this long before touchdown until touchdown
 LANDING_NOW = 2 * 60
 
 SCHEDULED, TAXI, AIR, LANDED, CANCELLED, DIVERTED = "scheduled", "taxi", "air", "landed", "cancelled", "diverted"
@@ -160,17 +159,10 @@ def budget(now=None):
                 "limit": limit, "left": round(max(0.0, limit - spent), 4)}
 
 
-def can_spend(cost, now=None):
-    b = budget(now)
-    return b["spent"] + cost <= b["limit"] + 1e-9
-
-
 def spend(cost, now=None):
-    """Record a lookup's cost. False (and nothing recorded) if it would go over budget."""
+    """Record a lookup's cost in our own ledger (the limit is checked in ``aeroapi``)."""
     with _lock:
         _load()
-        if not can_spend(cost, now):
-            return False
         key = month(now)
         m = _ledger.setdefault(key, {"spent": 0.0, "calls": 0})
         m["spent"] = round(float(m.get("spent", 0)) + cost, 4)
@@ -377,16 +369,12 @@ def next_poll(f, now=None):
 
     More than a day out it waits until a day before; then hourly until two hours
     before, every 10 minutes after that (5 around departure) and every 10 minutes
-    in the air (5 in the last half hour, every minute in the last 15). After
-    touchdown it keeps checking every minute until the plane reaches the gate.
+    in the air (5 in the last half hour, every 2 minutes in the last 15). It
+    stops at touchdown.
     """
     now = time.time() if now is None else now
     p = phase(f)
-    if p == LANDED:
-        if f.get("act_in") or not f.get("act_on") or now - f["act_on"] >= GATE_WAIT:
-            return None
-        return now + 60
-    if p in (CANCELLED, DIVERTED):
+    if p in (LANDED, CANCELLED, DIVERTED):
         return None
     if p in (SCHEDULED, TAXI) and not f.get("act_off"):
         dep = f.get("est_out") or f.get("sched_out")
@@ -402,7 +390,7 @@ def next_poll(f, now=None):
         return now + 600
     arr = f.get("est_on") or f.get("est_in") or f.get("sched_in")
     if arr is not None and arr - now <= FINAL_APPROACH:
-        return now + 60
+        return now + 120
     if arr is not None and arr - now <= 30 * 60:
         return now + 300
     return now + 600
