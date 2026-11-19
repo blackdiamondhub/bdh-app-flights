@@ -143,7 +143,10 @@ class AeroApiTests(Fresh, TestCase):
             {"operation": "GET /flights/{id}/position", "total_resource_calls": 3, "resource_cost": 0.03},
             {"operation": "GET /airports/{id}/flights/to/{dest_id}", "total_resource_calls": 1, "resource_cost": 0.05},
             {"operation": "GET /schedules/{date_start}/{date_end}", "total_resource_calls": 4, "resource_cost": 0.08},
-            {"operation": "GET /operators/{id}", "total_resource_calls": 3, "resource_cost": 0.02}]}
+            {"operation": "GET /airports/{id}", "total_resource_calls": 1, "resource_cost": 0.01},
+            {"operation": "GET /airports/{id}/flights/scheduled_arrivals", "total_resource_calls": 1,
+             "resource_cost": 0.01},
+            {"operation": "GET /operators/{id}", "total_resource_calls": 1, "resource_cost": 0.0}]}
 
     def test_reads_usage_from_flightaware(self):
         self.fetch_patch.stop()
@@ -155,7 +158,7 @@ class AeroApiTests(Fresh, TestCase):
         self.assertEqual((u["ok"], u["total"], u["calls"]), (True, 0.21, 17))
         self.assertEqual([(p["label"], p["calls"], p["cost"]) for p in u["parts"]],
                          [("Route search", 1, 0.05), ("Date search", 4, 0.08), ("Live position", 3, 0.03),
-                          ("Flight status", 6, 0.03), ("Other", 3, 0.02)])
+                          ("Flight status", 6, 0.03), ("Airport lookup", 2, 0.02), ("Other", 1, 0.0)])
         aeroapi.usage(T0 + aeroapi.USAGE_TTL - 1)
         self.assertEqual(self.get.call_count, 1)  # cached
         aeroapi.usage(T0 + aeroapi.USAGE_TTL)

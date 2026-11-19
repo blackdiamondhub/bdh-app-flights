@@ -58,7 +58,7 @@
     <h3>This month by lookup</h3>
     {% for p in parts %}
     <div class="hst-row fu-row">
-        <div class="lbl"><b>{{ p.label }}</b>{% if p.label == 'Other' %}<small>Calls not made by this hub</small>{% endif %}</div>
+        <div class="lbl"><b>{{ p.label }}</b></div>
         <span class="fu-n">{{ p.calls }} call{{ p.calls|pluralize }}</span>
         <span class="fu-c">${{ p.cost|floatformat:2 }}</span>
     </div>
