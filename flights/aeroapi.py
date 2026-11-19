@@ -92,6 +92,7 @@ KINDS = (
     ("Date search", lambda op: "/schedules" in op),
     ("Live position", lambda op: op.rstrip("/").endswith("/position")),
     ("Flight status", lambda op: op.split(" ", 1)[-1].startswith("/flights/")),
+    ("Airport lookup", lambda op: op.split(" ", 1)[-1].startswith("/airports/")),
 )
 
 
