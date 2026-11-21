@@ -601,3 +601,26 @@ class HubFrameLayoutTests(SimpleTestCase):
                 if pattern.search(line):
                     hits.append(f"{path.relative_to(root)}:{n}: {line.strip()}")
         self.assertEqual(hits, [])
+
+
+class PhoneLayoutTests(SimpleTestCase):
+    """A bare `1fr` grid track has an `auto` minimum, so one wide child (a row
+    of buttons, a long word) widens the whole column past a phone screen and
+    the page gets cut off on the right. Every fr track must be
+    `minmax(0, Nfr)`."""
+
+    def test_grid_fr_tracks_have_zero_minimum(self):
+        import pathlib
+        import re
+        root = pathlib.Path(__file__).resolve().parent.parent
+        decl = re.compile(r"grid-template-columns\s*:\s*([^;}]+)")
+        safe = re.compile(r"minmax\(\s*0(px)?\s*,\s*[\d.]*fr\s*\)")
+        hits = []
+        css = list(root.glob("static/**/*.css"))
+        self.assertTrue(css)
+        for path in css:
+            for n, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+                for m in decl.finditer(line):
+                    if re.search(r"\d*\.?\d+fr\b", safe.sub("", m.group(1))):
+                        hits.append(f"{path.relative_to(root)}:{n}: {line.strip()}")
+        self.assertEqual(hits, [])
