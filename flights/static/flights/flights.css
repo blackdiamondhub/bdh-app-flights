@@ -151,10 +151,11 @@ body.fl-page {
 
   .fl-detail { padding: 16px; border-radius: 20px; }
   .fl-top b { font-size: 21px; }
-  .fl-big { margin: 16px 0; align-items: flex-start; }
+  /* progress bar gets its own full-width row above the airports */
+  .fl-big { margin: 16px 0; align-items: flex-start; flex-wrap: wrap; column-gap: 12px; }
   .fl-ap { font-size: 26px; flex: 1 1 0; min-width: 0; }
   .fl-ap small { font-size: 13px; overflow-wrap: anywhere; }
-  .fl-bar { flex: 0 0 48px; margin: 14px 10px 0; }
+  .fl-bar { order: -1; flex: 0 0 calc(100% - 24px); margin: 12px 12px 18px; }
   .fl-bar b { font-size: 16px; top: -9px; }
   .fl-grid { gap: 8px; }
   .fl-cell { padding: 10px 12px; font-size: 15px; }

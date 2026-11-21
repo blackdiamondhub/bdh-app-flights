@@ -624,3 +624,15 @@ class PhoneLayoutTests(SimpleTestCase):
                     if re.search(r"\d*\.?\d+fr\b", safe.sub("", m.group(1))):
                         hits.append(f"{path.relative_to(root)}:{n}: {line.strip()}")
         self.assertEqual(hits, [])
+
+    def test_progress_bar_gets_own_row_on_phones(self):
+        """Squeezed between the airport codes the bar was ~48px wide on a phone."""
+        import pathlib
+        import re
+        css = (pathlib.Path(__file__).resolve().parent.parent / "static/flights/flights.css").read_text(encoding="utf-8")
+        phone = css[css.index("@media (max-width: 600px)"):]
+        big = re.search(r"\.fl-big\s*\{([^}]*)\}", phone).group(1)
+        bar = re.search(r"\.fl-bar\s*\{([^}]*)\}", phone).group(1)
+        self.assertIn("flex-wrap: wrap", big)
+        self.assertIn("order: -1", bar)
+        self.assertRegex(bar, r"flex:\s*0 0 calc\(100%")
