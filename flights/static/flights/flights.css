@@ -9,7 +9,7 @@ body.fl-page {
 }
 .fl-btn {
   font: inherit; font-size: 17px; font-weight: 600; border: 0; border-radius: 999px; padding: 0 24px; height: 50px;
-  background: #5ba4e6; color: #07111f; display: inline-flex; align-items: center; gap: 10px; cursor: pointer; flex: none;
+  background: #5ba4e6; color: #07111f; display: inline-flex; align-items: center; justify-content: center; gap: 10px; cursor: pointer; flex: none;
 }
 .fl-btn.ghost { background: rgba(255, 255, 255, .08); color: #dbe6f5; }
 .fl-btn.small { height: 40px; font-size: 15px; padding: 0 16px; }
@@ -60,8 +60,8 @@ body.fl-page {
 .fl-bar { flex: 1; margin: 0 22px; height: 6px; background: #26354f; border-radius: 3px; position: relative; }
 .fl-bar i { position: absolute; left: 0; top: 0; bottom: 0; background: #5ba4e6; border-radius: 3px; }
 .fl-bar b { position: absolute; top: -12px; transform: translateX(-50%); font-size: 20px; color: #9fd0ff; }
-.fl-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-.fl-cell { background: rgba(7, 12, 20, .45); border-radius: 14px; padding: 12px 14px; font-size: 16px; }
+.fl-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.fl-cell { background: rgba(7, 12, 20, .45); border-radius: 14px; padding: 12px 14px; font-size: 16px; overflow-wrap: anywhere; }
 .fl-cell .fl-sub { font-size: 13px; margin: 0 0 4px; }
 .fl-foot { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-top: 18px; color: #8fa3bd; font-size: 13px; }
 .fl-foot .fl-btns { display: flex; gap: 10px; }
@@ -131,7 +131,50 @@ body.fl-page {
 
 @media (max-width: 900px) {
   .fl-wrap { padding: 16px 14px 30px; }
-  .fl-main { grid-template-columns: 1fr; }
+  /* minmax(0, ...) so wide content can't push the column past the screen */
+  .fl-main { grid-template-columns: minmax(0, 1fr); }
   .fl-head { flex-wrap: wrap; gap: 12px; }
   .fl-ap { font-size: 30px; }
+}
+
+/* phones */
+@media (max-width: 600px) {
+  .fl-wrap { padding: 14px 12px 28px; }
+  .fl-head { flex-wrap: nowrap; margin-bottom: 14px; }
+  .fl-head h1 { font-size: 26px; }
+  #fl-new { height: 42px; font-size: 15px; padding: 0 16px; gap: 8px; }
+  .fl-warn { padding: 12px 14px; font-size: 14px; }
+  .fl-main { gap: 14px; }
+  .fl-list { gap: 10px; }
+  .fl-card { padding: 14px; border-radius: 18px; }
+  .fl-card b { font-size: 17px; }
+
+  .fl-detail { padding: 16px; border-radius: 20px; }
+  .fl-top b { font-size: 21px; }
+  .fl-big { margin: 16px 0; align-items: flex-start; }
+  .fl-ap { font-size: 26px; flex: 1 1 0; min-width: 0; }
+  .fl-ap small { font-size: 13px; overflow-wrap: anywhere; }
+  .fl-bar { flex: 0 0 48px; margin: 14px 10px 0; }
+  .fl-bar b { font-size: 16px; top: -9px; }
+  .fl-grid { gap: 8px; }
+  .fl-cell { padding: 10px 12px; font-size: 15px; }
+  .fl-foot { flex-direction: column; align-items: stretch; gap: 12px; }
+  .fl-foot .fl-btns { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+  .fl-foot .fl-btn {
+    flex-direction: column; justify-content: center; height: 58px; gap: 4px; padding: 0 4px; font-size: 13px;
+    white-space: nowrap; min-width: 0;
+  }
+
+  .fl-sheet { align-items: flex-end; padding: 0; }
+  .fl-panel {
+    border-radius: 20px 20px 0 0; max-height: 92vh; max-height: 92dvh; padding: 18px 16px;
+    padding-bottom: calc(18px + env(safe-area-inset-bottom)); gap: 12px;
+  }
+  #fl-by-route { flex-direction: column; align-items: stretch; gap: 8px; }
+  #fl-by-route .fl-in { flex: none; width: 100%; }
+  #fl-by-route .fl-arrow { transform: rotate(90deg); align-self: center; }
+  .fl-in { font-size: 17px; }
+  .fl-acts .fl-btn { flex: 1; }
+  .fl-check { font-size: 15px; }
+  .fl-toast { left: 16px; right: 16px; transform: none; text-align: center; border-radius: 16px; }
 }
