@@ -1,6 +1,6 @@
 # bdh-app-flights
 
-Flight tracker app for [BlackDiamondHub](https://github.com/blackdiamondlodge/BlackDiamondHub).
+Flight tracker app for [BlackDiamondHub](https://github.com/blackdiamondhub/BlackDiamondHub).
 
 Find a flight by number (`AS342`) or by route and date (`SEA → SFO`). Then track it to see:
 
